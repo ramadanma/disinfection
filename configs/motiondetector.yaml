@@ -1,0 +1,49 @@
+service:
+  place: "default_place"
+  cuda: 0
+
+  rtsp_url: "rtsp://admin:password@ip:554/Streaming/Channels/101"
+  rtsp_protocol: "tcp"          # tcp/udp
+
+  device_id: "#000100001"
+  report_count: 5
+
+  pool_npy: "./region/pool.npy"
+  road_npy: "./region/road.npy"
+
+  known_dir: "known"
+  models_root: "../.insightface"
+
+  redis:
+    host: "127.0.0.1"
+    port: 6379
+    queue: "downloaded"
+
+  debug:
+    draw_skeleton: true
+    show_gui: false
+
+  yolo:
+    model: "yolo11n-pose.pt"
+    conf: 0.5
+    iou: 0.5
+    imgsz: 1280
+    tracker: "bytetrack.yaml"
+    classes: [0]           # 只检测 person
+    persist: true
+    agnostic_nms: true
+    max_det: 50
+
+  outputs:
+    email:
+      enabled: false
+      smtp_host: "smtp.example.com"
+      smtp_port: 465
+      use_ssl: true
+      use_starttls: false
+      username: "your_email@example.com"
+      password: "your_smtp_password_or_token"
+      from_addr: "your_email@example.com"
+      to_addrs:
+        - "receiver1@example.com"
+      subject_prefix: "[motiondetector]"
