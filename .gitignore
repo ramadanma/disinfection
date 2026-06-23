@@ -2,3 +2,7 @@
 .insightface/
 configs/region/
 configs/config.yaml
+*.pt
+/logs	
+/captures
+/run
