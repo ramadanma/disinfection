@@ -32,7 +32,7 @@ def load_yaml_config(path: str) -> dict:
 def parse_args():
     # 先解析 --config
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--config", default=os.getenv("MOTIONDETECTOR_CONFIG", "configs/motiondetector.yaml"))
+    pre.add_argument("--config", default=os.getenv("MOTIONDETECTOR_CONFIG", "configs/config.yaml"))
     pre_args, _ = pre.parse_known_args()
     cfg = load_yaml_config(pre_args.config)
 

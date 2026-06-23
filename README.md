@@ -8,7 +8,7 @@
 
 ## 模型
 
-起初用的是ultralytics自己的yolo11n-pose模型，但是使用一段时间后会降棍状物体识别为人腿，所以自己又在它的基础上做了训练：
+起初用的是ultralytics自己的yolo11n-pose模型，但是使用一段时间后会将棍状物体识别为人腿，所以自己又在它的基础上做了训练：
 
 ```python
 from ultralytics import YOLO
@@ -30,13 +30,13 @@ results = model.train(data="Objects365.yaml", epochs=100,device=[1,2], imgsz=640
 
 ## 运行
 ```shell
-chmod +x start_motiondetector.sh
-bash start_motiondetector.sh
+chmod +x start_detector.sh
+bash start_detector.sh
 ```
 
 ## 配置
 
-在[配置文件](./configs/motiondetector.yaml)可以做以下修改
+在[配置文件](./configs/config.yaml)可以做以下修改
 
 
 名称 | 说明
