@@ -52,6 +52,10 @@ def parse_args():
     parser.add_argument("--report_count", "-rc",
                         default=int(_deep_get(cfg, "service.report_count", os.getenv("REPORT_COUNT", "5"))),
                         type=int)
+    parser.add_argument("--required_time", "-rt",
+                        default=float(_deep_get(cfg, "service.required_time", os.getenv("REQUIRED_TIME", "10.0"))),
+                        type=float,
+                        help="Seconds a person must stay in the pool (default: 10.0)")
 
     parser.add_argument("--pool", default=_deep_get(cfg, "service.pool_npy", os.getenv("POOL_NPY", "pool.npy")))
     parser.add_argument("--road", default=_deep_get(cfg, "service.road_npy", os.getenv("ROAD_NPY", "road.npy")))

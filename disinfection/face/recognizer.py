@@ -93,7 +93,7 @@ class FaceRecognizer:
         if len(filtered_names) == 0:
             return "unknown"
 
-        base_names = [n.split("_")[0] for n in filtered_names]
+        base_names = [n.rsplit("_", 1)[0] for n in filtered_names]
         if len(set(base_names)) == 1:
             return base_names[0]
 
@@ -101,7 +101,7 @@ class FaceRecognizer:
         for n, c in history:
             if n == "unknown":
                 continue
-            base = n.split("_")[0]
+            base = n.rsplit("_", 1)[0]
             scores.setdefault(base, []).append(c)
 
         avg_scores = {k: float(np.mean(v)) for k, v in scores.items()}

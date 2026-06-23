@@ -53,6 +53,7 @@ def main():
         known_dir=args.known_dir,
         models_root=args.models_root,
         report_count=args.report_count,
+        required_time=args.required_time,
         redis_host=args.redis_host,
         redis_port=args.redis_port,
         redis_queue=args.redis_queue,

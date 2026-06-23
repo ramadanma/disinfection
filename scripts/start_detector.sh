@@ -5,12 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 PY="${PROJECT_ROOT}/.venv/bin/python"
-CONFIG_PATH="${1:-${PROJECT_ROOT}/configs/disinfection.yaml}"
+CONFIG_PATH="${1:-${PROJECT_ROOT}/configs/config.yaml}"
 
 PID_DIR="${PROJECT_ROOT}/run"
 PID_FILE="${PID_DIR}/disinfection.pid"
 
-mkdir -p "${PID_DIR}"
+LOG_DIR="${PROJECT_ROOT}/logs"
+mkdir -p "${PID_DIR}" "${LOG_DIR}"
+STARTUP_LOG="${LOG_DIR}/startup.log"
 
 if [[ ! -x "${PY}" ]]; then
   echo "venv python not found or not executable: ${PY}"
@@ -30,7 +32,7 @@ fi
 cd "${PROJECT_ROOT}"
 
 nohup "${PY}" -m disinfection.services.disinfection_service --config "${CONFIG_PATH}" \
-  >/dev/null 2>&1 &
+  >>"${STARTUP_LOG}" 2>&1 &
 
 echo $! > "${PID_FILE}"
 echo "disinfection started, pid=$(cat "${PID_FILE}")"

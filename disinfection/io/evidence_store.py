@@ -6,6 +6,7 @@ import time
 import random
 import logging
 import datetime
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class EvidenceStore:
         self.last_save_time = time.time()
         self.last_save_id = ""
         self.persons_images = {}  # person_id -> [filepath...]
+        self._images_lock = threading.Lock()
 
     def compress_frame(self, frame, max_width=640, max_height=480, quality=60):
         h, w = frame.shape[:2]
@@ -49,7 +51,8 @@ class EvidenceStore:
                     logger.error("cv2.imwrite 返回 False: %s", filepath)
                     return None
 
-                self.persons_images.setdefault(person_id, []).append(filepath)
+                with self._images_lock:
+                    self.persons_images.setdefault(person_id, []).append(filepath)
                 self.last_save_time = current_time_sec
                 self.last_save_id = new_save_id
                 logger.info("Saved person %s image: %s", person_id, filepath)
@@ -58,9 +61,18 @@ class EvidenceStore:
                 logger.error("Failed to save image: %s", e)
         return None
 
+    def clear_person_images(self, person_id) -> None:
+        with self._images_lock:
+            self.persons_images[person_id] = []
+
+    def clear_all_images(self) -> None:
+        with self._images_lock:
+            self.persons_images.clear()
+
     def get_unqualified_images(self, person_id, limit=5, window_seconds=10):
         try:
-            cached_files = self.persons_images.get(person_id, []).copy()
+            with self._images_lock:
+                cached_files = self.persons_images.get(person_id, []).copy()
             results = []
             pattern = re.compile(r"^person_(\d{8})_(\d{6})_(\d+?)_(\d+?)_\d+\.jpg$")
 

@@ -55,6 +55,7 @@ class DisinfectionPipeline:
                  known_dir: str,
                  models_root: str,
                  report_count: int,
+                 required_time: float = 10.0,
                  redis_host="127.0.0.1",
                  redis_port=6379,
                  redis_queue="downloaded",
@@ -79,6 +80,9 @@ class DisinfectionPipeline:
         self.outputs_cfg = outputs_cfg or {}
 
         self.stop_evt = threading.Event()
+        self._persons_lock = threading.Lock()
+        self._identity_lock = threading.Lock()
+        self._recognizer_lock = threading.Lock()
 
         self.frame_q = queue.Queue(maxsize=45)
         self.results_q = queue.Queue(maxsize=30)
@@ -88,7 +92,7 @@ class DisinfectionPipeline:
         self.pool_region = load_polygon_npy(pool_path, name="pool")
         self.roi_pts = load_roi_pts(road_path)
 
-        self.required_time = 1.0
+        self.required_time = float(required_time)
         self.stable_threshold = 2
         self.keypoint_conf_threshold = 0.7
         self.keypoint_indices = {'left_ankle': 15, 'right_ankle': 16, 'nose': 0, 'left_ear': 3, 'right_ear': 4}
@@ -132,7 +136,6 @@ class DisinfectionPipeline:
             pool_region=self.pool_region,
             stable_threshold=self.stable_threshold,
             required_time=self.required_time,
-            distance=1.0
         )
 
         self.redis_client = redis.StrictRedis(host=redis_host, port=redis_port, decode_responses=True)
@@ -245,7 +248,7 @@ class DisinfectionPipeline:
     def stop(self):
         self.stop_evt.set()
         for t in getattr(self, "threads", []):
-            t.join(timeout=0.2)
+            t.join(timeout=1.5)
 
     def inference_worker(self):
         while not self.stop_evt.is_set():
@@ -299,11 +302,15 @@ class DisinfectionPipeline:
             except queue.Empty:
                 continue
 
-            name, conf = self.face_recognizer.recognize(face_img, person_id)
-            final_name = self.face_recognizer.update_identity(person_id, name, conf)
+            with self._recognizer_lock:
+                recognizer = self.face_recognizer  # snapshot reference; safe to use outside lock
 
-            self.identity_store.setdefault(person_id, {"final_name": "unknown"})
-            self.identity_store[person_id]["final_name"] = final_name
+            name, conf = recognizer.recognize(face_img, person_id)
+            final_name = recognizer.update_identity(person_id, name, conf)
+
+            with self._identity_lock:
+                self.identity_store.setdefault(person_id, {"final_name": "unknown"})
+                self.identity_store[person_id]["final_name"] = final_name
 
     def io_worker(self):
         while not self.stop_evt.is_set():
@@ -331,11 +338,14 @@ class DisinfectionPipeline:
                     unqualified_limit = min(save_count, 5) if save_count > 0 else 5
 
                     images = self.evidence.get_unqualified_images(person_id, unqualified_limit)
-                    identity = (self.identity_store.get(person_id, {}) or {}).get('final_name', 'unknown')
 
-                    person = self.persons.get(person_id, {})
-                    state = person.get('state', 'unknown')
-                    total_duration = float(person.get('total_duration', 0.0))
+                    with self._identity_lock:
+                        identity = (self.identity_store.get(person_id, {}) or {}).get('final_name', 'unknown')
+
+                    with self._persons_lock:
+                        person = self.persons.get(person_id, {})
+                        state = person.get('state', 'unknown')
+                        total_duration = float(person.get('total_duration', 0.0))
 
                     if images and self.email_reporter is not None:
                         self.email_reporter.send_report(
@@ -343,10 +353,12 @@ class DisinfectionPipeline:
                             place=self.place
                         )
 
-                        self.evidence.persons_images[person_id] = []
-                        if person:
-                            person['has_recorded'] = True
-                            person['should_record'] = False
+                        self.evidence.clear_person_images(person_id)
+                        with self._persons_lock:
+                            person_ref = self.persons.get(person_id)
+                            if person_ref is not None:
+                                person_ref['has_recorded'] = True
+                                person_ref['should_record'] = False
 
             except Exception as e:
                 logger.error("io_worker error: %s", e)
@@ -357,19 +369,23 @@ class DisinfectionPipeline:
         while not self.stop_evt.is_set():
             try:
                 if self.face_q.empty():
-                    redis_info = self.redis_client.blpop(self.REDIS_QUEUE, timeout=5)
+                    redis_info = self.redis_client.blpop(self.REDIS_QUEUE, timeout=1)
                     if not redis_info:
                         continue
                     _, message = redis_info
 
                     if message in ('delete', 'update'):
                         logger.info("收到更新人脸库指令=%s，正在重加载人脸识别模块", message)
-                        self.face_recognizer = reload_face_recognizer(
-                            old=self.face_recognizer,
+                        with self._recognizer_lock:
+                            old = self.face_recognizer
+                        new_recognizer = reload_face_recognizer(
+                            old=old,
                             ctx_id=self.cuda_id,
-                            known_dir=self.face_recognizer.known_dir,
-                            models_root=self.face_recognizer.models_root
+                            known_dir=old.known_dir,
+                            models_root=old.models_root,
                         )
+                        with self._recognizer_lock:
+                            self.face_recognizer = new_recognizer
                 else:
                     time.sleep(0.05)
             except Exception as e:
@@ -382,10 +398,14 @@ class DisinfectionPipeline:
             try:
                 if self.face_q.empty() and self.io_q.empty() and len(self.persons) > 50:
                     logger.info("清理 persons 内存，占用过大")
-                    self.persons.clear()
-                    self.evidence.persons_images.clear()
-                    self.identity_store.clear()
-                    self.face_recognizer.identity_history.clear()
+                    with self._persons_lock:
+                        self.persons.clear()
+                    self.evidence.clear_all_images()
+                    with self._identity_lock:
+                        self.identity_store.clear()
+                    with self._recognizer_lock:
+                        recognizer = self.face_recognizer
+                    recognizer.identity_history.clear()
             except Exception as e:
                 logger.error("clean_worker error: %s", e)
 
@@ -449,15 +469,18 @@ class DisinfectionPipeline:
                         both_feet_in = (geometry.is_point_in_region(foot_positions[0], self.pool_region) and
                                         geometry.is_point_in_region(foot_positions[1], self.pool_region))
 
-                    person = self.state_machine.update(
-                        self.persons,
-                        self.evidence.persons_images,
-                        person_id,
-                        both_feet_in,
-                        current_time,
-                        foot_positions=foot_positions,
-                        nose_position=nose_position
-                    )
+                    with self._persons_lock:
+                        person = self.state_machine.update(
+                            self.persons,
+                            self.evidence.persons_images,
+                            person_id,
+                            both_feet_in,
+                            current_time,
+                            foot_positions=foot_positions,
+                            nose_position=nose_position
+                        )
+                        should_save = person.get('should_save_image', False)
+                        unqualified_count = person.get('unqualified_count', 0)
 
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
@@ -468,7 +491,7 @@ class DisinfectionPipeline:
                     if face_img is not None and face_img.size > 0 and (not self.face_q.full()):
                         self.face_q.put_nowait((person_id, face_img))
 
-                    if person.get('should_save_image', False):
+                    if should_save:
                         evidence_img = self.evidence.compress_frame(frame)
                         try:
                             self.io_q.put_nowait({
@@ -476,22 +499,27 @@ class DisinfectionPipeline:
                                 'image': evidence_img,
                                 'person_id': person_id,
                                 'timestamp': datetime.datetime.now(),
-                                'save_count': person.get('unqualified_count', 0),
+                                'save_count': unqualified_count,
                             })
-                            person['should_save_image'] = False
+                            with self._persons_lock:
+                                p = self.persons.get(person_id)
+                                if p is not None:
+                                    p['should_save_image'] = False
                         except queue.Full:
                             logger.warning("IO queue is full, discarding save request person=%s", person_id)
 
-                    if person.get('should_record', False) and (not person.get('has_recorded', False)):
-                        try:
-                            self.io_q.put_nowait({
-                                'upload': True,
-                                'person_id': person_id,
-                                'save_count': person.get('unqualified_count', 0),
-                            })
-                            person['has_recorded'] = True
-                            person['should_record'] = False
-                        except queue.Full:
-                            logger.warning("IO queue is full, discarding record request person=%s", person_id)
+                    with self._persons_lock:
+                        p = self.persons.get(person_id)
+                        if p is not None and p.get('should_record', False) and not p.get('has_recorded', False):
+                            try:
+                                self.io_q.put_nowait({
+                                    'upload': True,
+                                    'person_id': person_id,
+                                    'save_count': p.get('unqualified_count', 0),
+                                })
+                                p['has_recorded'] = True
+                                p['should_record'] = False
+                            except queue.Full:
+                                logger.warning("IO queue is full, discarding record request person=%s", person_id)
 
             self.results_q.task_done()
