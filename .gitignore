@@ -1,10 +1,24 @@
 .venv/
 .insightface/
+
+# configs
 configs/region/
 configs/config.yaml
+
+# model weights
 *.pt
-logs/	
+
+# runtime output
+logs/
 captures/
 run/
+
+# python cache
+__pycache__/
 *.pyc
+
+# region definition files (deployment-specific)
 region/
+
+# claude code internal files
+.claude/
