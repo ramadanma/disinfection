@@ -1,7 +1,0 @@
-2026-06-23 14:24:01,637 INFO [place=default_place cuda=0 pid=1268310] disinfection.face.updater: Reload face recognizer block: known_dir=known ctx_id=0
-2026-06-23 14:24:03,628 INFO [place=default_place cuda=0 pid=1268310] disinfection.analytics.pipeline: YOLO cfg: {'model': 'yolo11n-pose.pt', 'conf': 0.5, 'iou': 0.5, 'imgsz': 1280, 'tracker': 'bytetrack.yaml', 'max_det': 50, 'persist': True, 'agnostic_nms': True, 'classes': [0]}
-2026-06-23 14:24:03,733 INFO [place=default_place cuda=0 pid=1268310] disinfection.analytics.pipeline: torch sees 4 gpus: ['Tesla T4', 'Tesla T4', 'Tesla T4', 'Tesla T4']
-2026-06-23 14:24:26,356 INFO [place=default_place cuda=0 pid=1268310] disinfection.analytics.yolo_pose: YOLO Pose loaded on cuda:0 model=yolo11n-pose.pt
-2026-06-23 14:24:31,764 INFO [place=default_place cuda=0 pid=1268310] disinfection.io.evidence_store: Saved person ### image: ./captures/default_place/20260623/person_20260623_142431_###_0_728764.jpg
-2026-06-23 14:36:32,643 INFO [place=default_place cuda=0 pid=1268310] __main__: received signal 15, stopping...
-2026-06-23 14:36:35,127 INFO [place=default_place cuda=0 pid=1268310] __main__: motiondetector service stopped
