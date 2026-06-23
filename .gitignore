@@ -3,6 +3,8 @@
 configs/region/
 configs/config.yaml
 *.pt
-/logs	
-/captures
-/run
+logs/	
+captures/
+run/
+*.pyc
+region/
